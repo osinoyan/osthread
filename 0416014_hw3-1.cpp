@@ -9,6 +9,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
+#define THREAD_NUM 16
 using namespace std;
 
 #define MYRED	2
@@ -19,6 +20,7 @@ int imgWidth, imgHeight;
 int FILTER_SIZE;
 int FILTER_SCALE;
 int *filter_G;
+
 
 const char *inputfile_name[5] = {
 	"input1.bmp",
@@ -34,14 +36,6 @@ const char *outputBlur_name[5] = {
 	"Blur4.bmp",
 	"Blur5.bmp"
 };
-/*
-const char *outputSobel_name[5] = {
-	"Sobel1.bmp",
-	"Sobel2.bmp",
-	"Sobel3.bmp",
-	"Sobel4.bmp",
-	"Sobel5.bmp"
-};*/
 
 unsigned char *pic_in, *pic_grey, *pic_blur, *pic_final;
 
@@ -55,6 +49,16 @@ unsigned char RGB2grey(int w, int h)
 	if (tmp < 0) tmp = 0;
 	if (tmp > 255) tmp = 255;
 	return (unsigned char)tmp;
+}
+
+void *RGB2greyMult(void *argu){
+	int pval = *(int*)argu;
+	//apply the Gaussian filter to the image
+	for (int j = 0; j<imgHeight; j++) {
+		for (int i = pval; i<imgWidth; i+=THREAD_NUM){
+			pic_grey[j*imgWidth + i] = RGB2grey(i, j);
+		}
+	}
 }
 
 unsigned char GaussianFilter(int w, int h)
@@ -83,7 +87,7 @@ void *GaussianFilterMult(void *argu){
 	int pval = *(int*)argu;
 	//apply the Gaussian filter to the image
 	for (int j = 0; j<imgHeight; j++) {
-		for (int i = pval; i<imgWidth; i+=3){
+		for (int i = pval; i<imgWidth; i+=THREAD_NUM){
 			//extend the size form WxHx1 to WxHx3
 			int tmp = GaussianFilter(i, j);
 			pic_final[3 * (j*imgWidth + i) + MYRED] = tmp;
@@ -119,20 +123,22 @@ int main()
 
 
 		//convert RGB image to grey image
-		for (int j = 0; j<imgHeight; j++) {
-			for (int i = 0; i<imgWidth; i++){
-				pic_grey[j*imgWidth + i] = RGB2grey(i, j);
-			}
+		pthread_t thread[ THREAD_NUM ];
+		for(int i=0; i<THREAD_NUM; i++){
+			int *pval = new int;
+			*pval = i;
+			pthread_create(&thread[i], NULL, RGB2greyMult, pval);
 		}
+		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread[i], NULL);
 
 
 		//apply the Gaussian filter to the image
-		pthread_t thread[3];
-		int pval0 = 0, pval1 = 1, pval2 = 2;
-		pthread_create(&thread[0], NULL, GaussianFilterMult, &pval0 );
-		pthread_create(&thread[1], NULL, GaussianFilterMult, &pval1 );
-		pthread_create(&thread[2], NULL, GaussianFilterMult, &pval2 );
-		for(int i=0; i<3; i++)	pthread_join(thread[i], NULL);
+		for(int i=0; i<THREAD_NUM; i++){
+			int *pval = new int;
+			*pval = i;
+			pthread_create(&thread[i], NULL, GaussianFilterMult, pval);
+		}
+		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread[i], NULL);
 
 		
 
