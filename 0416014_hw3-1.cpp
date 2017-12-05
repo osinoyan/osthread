@@ -9,7 +9,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
-#define THREAD_NUM 16
+#define THREAD_NUM 8
 using namespace std;
 
 #define MYRED	2
@@ -66,17 +66,24 @@ unsigned char GaussianFilter(int w, int h)
 	int tmp = 0;
 	int a, b;
 	int ws = (int)sqrt((float)FILTER_SIZE);
-	for (int j = 0; j<ws; j++)
-	for (int i = 0; i<ws; i++)
-	{
-		a = w + i - (ws / 2);
-		b = h + j - (ws / 2);
 
-		// detect for borders of the image
-		if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
+	int wsHalf  = ws/2;
+	int w_minus_wsHalf = w - ws/2;
+	int h_minus_wsHalf = h - ws/2;
 
-		tmp += filter_G[j*ws + i] * pic_grey[b*imgWidth + a];
-	};
+	for (int j = 0; j<ws; j++){
+		int jws = j*ws;
+		for (int i = 0; i<ws; i++){
+
+			a = i + w_minus_wsHalf;
+			b = j + h_minus_wsHalf;
+
+			// detect for borders of the image
+			if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
+
+			tmp += filter_G[jws + i] * pic_grey[b*imgWidth + a];
+		}
+	}
 	tmp /= FILTER_SCALE;
 	if (tmp < 0) tmp = 0;
 	if (tmp > 255) tmp = 255;
