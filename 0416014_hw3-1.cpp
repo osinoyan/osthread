@@ -93,12 +93,15 @@ void *RGB2greyMult(void *argu){
 		for (int i = 0; i<imgWidth; i++){
 			pic_grey[j*imgWidth + i] = RGB2grey(i, j);
 		}
-		if(j >= 2){
+		if( j >= frameBegin+3 ){
 			 sem_post( &sema[ pval ] );
-			 // printf("[RGB2grey][j = %d] sema+\n", j);
-			 // PAUSE;
+/*			 if(j <= frameBegin+5){
+			  	printf("[Th %d][RGB2grey][j = %d] sema+\n", pval, j);
+			 	PAUSE;
+			 }*/
 		}
 	}
+	sem_post( &sema[ pval ] );
 	sem_post( &sema[ pval ] );
 	sem_post( &sema[ pval ] );
 }
@@ -110,8 +113,10 @@ void *GaussianFilterMult(void *argu){
 	int frameEnd = frameBegin + frame;
 	for (int j = frameBegin; j<frameEnd; j++) {
 		sem_wait( &sema[ pval ] );
-		// printf("[GaussianFilterMult][imgHeight = %d][j = %d] sema-\n", imgHeight, j);
-		// PAUSE;
+/*		if(j <= frameBegin+5){
+			printf("[Th %d][GaussianFilterMult][imgHeight = %d][j = %d] sema-\n", pval, imgHeight, j);
+			PAUSE;
+		}*/
 		for (int i = 0; i<imgWidth; i++){
 			//extend the size form WxHx1 to WxHx3
 			int tmp = GaussianFilter(i, j);
