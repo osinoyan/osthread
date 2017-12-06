@@ -9,7 +9,8 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
-#define THREAD_NUM 8
+#define THREAD_NUM 2
+#define PAUSE printf("PAUSE\n");while(getchar() != '\n')
 using namespace std;
 
 #define MYRED	2
@@ -21,6 +22,8 @@ int FILTER_SIZE;
 int FILTER_SCALE;
 int *filter_G;
 
+sem_t sema[THREAD_NUM];
+int frame;
 
 const char *inputfile_name[5] = {
 	"input1.bmp",
@@ -51,15 +54,6 @@ unsigned char RGB2grey(int w, int h)
 	return (unsigned char)tmp;
 }
 
-void *RGB2greyMult(void *argu){
-	int pval = *(int*)argu;
-	//apply the Gaussian filter to the image
-	for (int j = 0; j<imgHeight; j++) {
-		for (int i = pval; i<imgWidth; i+=THREAD_NUM){
-			pic_grey[j*imgWidth + i] = RGB2grey(i, j);
-		}
-	}
-}
 
 unsigned char GaussianFilter(int w, int h)
 {
@@ -90,11 +84,35 @@ unsigned char GaussianFilter(int w, int h)
 	return (unsigned char)tmp;
 }
 
+void *RGB2greyMult(void *argu){
+	int pval = *(int*)argu;
+	//apply the Gaussian filter to the image
+	int frameBegin = frame * pval;
+	int frameEnd = frameBegin + frame;
+	for (int j = frameBegin; j<frameEnd; j++) {
+		for (int i = 0; i<imgWidth; i++){
+			pic_grey[j*imgWidth + i] = RGB2grey(i, j);
+		}
+		if(j >= 2){
+			 sem_post( &sema[ pval ] );
+			 // printf("[RGB2grey][j = %d] sema+\n", j);
+			 // PAUSE;
+		}
+	}
+	sem_post( &sema[ pval ] );
+	sem_post( &sema[ pval ] );
+}
+
 void *GaussianFilterMult(void *argu){
 	int pval = *(int*)argu;
 	//apply the Gaussian filter to the image
-	for (int j = 0; j<imgHeight; j++) {
-		for (int i = pval; i<imgWidth; i+=THREAD_NUM){
+	int frameBegin = frame * pval;
+	int frameEnd = frameBegin + frame;
+	for (int j = frameBegin; j<frameEnd; j++) {
+		sem_wait( &sema[ pval ] );
+		// printf("[GaussianFilterMult][imgHeight = %d][j = %d] sema-\n", imgHeight, j);
+		// PAUSE;
+		for (int i = 0; i<imgWidth; i++){
 			//extend the size form WxHx1 to WxHx3
 			int tmp = GaussianFilter(i, j);
 			pic_final[3 * (j*imgWidth + i) + MYRED] = tmp;
@@ -128,24 +146,23 @@ int main()
 		pic_final = (unsigned char*)malloc(3 * imgWidth*imgHeight*sizeof(unsigned char));
 		
 
-
-		//convert RGB image to grey image
-		pthread_t thread[ THREAD_NUM ];
+		frame =  imgHeight / THREAD_NUM ;
+		int apple[ THREAD_NUM ];
+		pthread_t thread[ THREAD_NUM ][2];
 		for(int i=0; i<THREAD_NUM; i++){
-			int *pval = new int;
-			*pval = i;
-			pthread_create(&thread[i], NULL, RGB2greyMult, pval);
+			sem_init(&sema[i], 0, 1);
+			sem_wait(&sema[i]);
+			apple[i] = i;
+			pthread_create(&thread[i][0], NULL, RGB2greyMult, &apple[i]);			
+			pthread_create(&thread[i][1], NULL, GaussianFilterMult, &apple[i]);
 		}
-		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread[i], NULL);
 
 
-		//apply the Gaussian filter to the image
+
 		for(int i=0; i<THREAD_NUM; i++){
-			int *pval = new int;
-			*pval = i;
-			pthread_create(&thread[i], NULL, GaussianFilterMult, pval);
+			pthread_join(thread[i][0], NULL);
+			pthread_join(thread[i][1], NULL);
 		}
-		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread[i], NULL);
 
 		
 
