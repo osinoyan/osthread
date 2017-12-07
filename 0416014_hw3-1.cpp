@@ -25,6 +25,9 @@ int *filter_G;
 
 sem_t sema;
 
+pthread_mutex_t mutex_j;
+pthread_mutex_t mutex_filter;
+
 const char *inputfile_name[5] = {
 	"input1.bmp",
 	"input2.bmp",
@@ -105,15 +108,25 @@ void *RGB2greyMult(void *argu){
 	}
 }
 
+int j_share;
+
 void *GaussianFilterMult(void *argu){
 	int pval = *(int*)argu;
 	//apply the Gaussian filter to the image
-	for (int j = 0; j<imgHeight; j++) {
+	for ( ; j_share < imgHeight ; ) {
 		sem_wait( &sema );
-/*		if(j <= frameBegin+5){
-			printf("[Th %d][GaussianFilterMult][imgHeight = %d][j = %d] sema-\n", pval, imgHeight, j);
+/*		if(j_share <= frameBegin+5){
+			printf("[Th %d][GaussianFilterMult][imgHeight = %d][j_share = %d] sema-\n", pval, imgHeight, j_share);
 			PAUSE;
 		}*/
+
+		pthread_mutex_lock(&mutex_j);
+		int j = j_share;
+		j_share++;
+		pthread_mutex_unlock(&mutex_j);
+
+		if(j >= imgHeight) break;
+
 		for (int i = 0; i<imgWidth; i++){
 			//extend the size form WxHx1 to WxHx3
 			int tmp = GaussianFilter(i, j);
@@ -121,6 +134,8 @@ void *GaussianFilterMult(void *argu){
 			pic_final[3 * (j*imgWidth + i) + MYGREEN] = tmp;
 			pic_final[3 * (j*imgWidth + i) + MYBLUE] = tmp;
 		}
+
+
 	}
 }
 
@@ -150,16 +165,21 @@ int main()
 		FILTER_SIZE_HALF = FILTER_SIZE / 2;
 
 		pthread_t threadRGB;
-		pthread_t threadFilter;
+		pthread_t threadFilter[2];
 		sem_init(&sema, 0, 1);
 		sem_wait(&sema);
 		int apple;
-		pthread_create(&threadRGB, NULL, RGB2greyMult, &apple);			
-		pthread_create(&threadFilter, NULL, GaussianFilterMult, &apple);
+		pthread_mutex_init(&mutex_j, NULL);
+		pthread_mutex_init(&mutex_filter, NULL);
+		pthread_create(&threadRGB, NULL, RGB2greyMult, &apple);		
+		j_share = 0;	
+		pthread_create(&threadFilter[0], NULL, GaussianFilterMult, &apple);
+		pthread_create(&threadFilter[1], NULL, GaussianFilterMult, &apple);
 
 
 		pthread_join(threadRGB, NULL);
-		pthread_join(threadFilter, NULL);
+		pthread_join(threadFilter[0], NULL);
+		pthread_join(threadFilter[1], NULL);
 
 		
 
