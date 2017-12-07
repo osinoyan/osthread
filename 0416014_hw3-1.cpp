@@ -19,7 +19,9 @@ using namespace std;
 
 int imgWidth, imgHeight;
 int FILTER_SIZE;
-int FILTER_SIZE_HALF;
+int WIN_SIZE;
+int EXTEND;
+int EXTEND_WIDTH;
 int FILTER_SCALE;
 int *filter_G;
 
@@ -47,10 +49,12 @@ unsigned char *pic_in, *pic_grey, *pic_final;
 
 unsigned char RGB2grey(int w, int h)
 {
+	int tPxl = 3 * (h*imgWidth + w);
+
 	int tmp = (
-		pic_in[3 * (h*imgWidth + w) + MYRED] +
-		pic_in[3 * (h*imgWidth + w) + MYGREEN] +
-		pic_in[3 * (h*imgWidth + w) + MYBLUE] )/3;
+		pic_in[tPxl + MYRED] +
+		pic_in[tPxl + MYGREEN] +
+		pic_in[tPxl + MYBLUE] )/3;
 
 	if (tmp < 0) tmp = 0;
 	if (tmp > 255) tmp = 255;
@@ -60,6 +64,8 @@ unsigned char RGB2grey(int w, int h)
 
 unsigned char GaussianFilter(int w, int h)
 {
+	w += EXTEND;
+	h += EXTEND;
 	int tmp = 0;
 	int a, b;
 	int ws = (int)sqrt((float)FILTER_SIZE);
@@ -76,9 +82,9 @@ unsigned char GaussianFilter(int w, int h)
 			b = j + h_minus_wsHalf;
 
 			// detect for borders of the image
-			if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
+			//if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
 
-			tmp += filter_G[jws + i] * pic_grey[b*imgWidth + a];
+			tmp += filter_G[jws + i] * pic_grey[ b*EXTEND_WIDTH + a ];
 		}
 	}
 	tmp /= FILTER_SCALE;
@@ -92,9 +98,9 @@ void *RGB2greyMult(void *argu){
 	//apply the Gaussian filter to the image
 	for (int j = 0; j<imgHeight; j++) {
 		for (int i = 0; i<imgWidth; i++){
-			pic_grey[j*imgWidth + i] = RGB2grey(i, j);
+			pic_grey[ (j + EXTEND) * EXTEND_WIDTH + (i + EXTEND) ] = RGB2grey(i, j);
 		}
-		if( j >= FILTER_SIZE_HALF ){
+		if( j >= EXTEND ){
 			sem_post( &sema );
 /*			if(j <= frameBegin+5){
 			 	printf("[Th %d][RGB2grey][j = %d] sema+\n", pval, j);
@@ -103,7 +109,7 @@ void *RGB2greyMult(void *argu){
 		}
 	}
 
-	for(int i=0; i < FILTER_SIZE_HALF + THREAD_NUM ; i++){
+	for(int i=0; i < EXTEND + THREAD_NUM ; i++){
 		sem_post( &sema );
 	}
 }
@@ -158,10 +164,13 @@ int main()
 		// read input BMP file
 		pic_in = bmpReader->ReadBMP(inputfile_name[k], &imgWidth, &imgHeight);
 		// allocate space for output image
-		pic_grey = (unsigned char*)malloc(imgWidth*imgHeight*sizeof(unsigned char));
+		//extended zeros	
+		WIN_SIZE = (int)sqrt((float)FILTER_SIZE);	
+		EXTEND = WIN_SIZE / 2;
+		EXTEND_WIDTH = imgWidth + EXTEND*2;
+		pic_grey = (unsigned char*)calloc( EXTEND_WIDTH * (imgHeight + EXTEND*2), sizeof(unsigned char) );
 		pic_final = (unsigned char*)malloc(3 * imgWidth*imgHeight*sizeof(unsigned char));
-		
-		FILTER_SIZE_HALF = FILTER_SIZE / 2;
+
 
 		pthread_t threadRGB;
 		pthread_t threadFilter[ THREAD_NUM ];
