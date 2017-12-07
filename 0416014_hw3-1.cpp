@@ -47,7 +47,7 @@ const char *outputBlur_name[5] = {
 
 unsigned char *pic_in, *pic_grey, *pic_final;
 
-unsigned char RGB2grey(int w, int h)
+/*unsigned char RGB2grey(int w, int h)
 {
 	int tPxl = 3 * (h*imgWidth + w);
 
@@ -70,7 +70,6 @@ unsigned char GaussianFilter(int w, int h)
 	int a, b;
 	int ws = (int)sqrt((float)FILTER_SIZE);
 
-	int wsHalf  = ws/2;
 	int w_minus_wsHalf = w - ws/2;
 	int h_minus_wsHalf = h - ws/2;
 
@@ -88,17 +87,23 @@ unsigned char GaussianFilter(int w, int h)
 		}
 	}
 	tmp /= FILTER_SCALE;
-	if (tmp < 0) tmp = 0;
-	if (tmp > 255) tmp = 255;
-	return (unsigned char)tmp;
-}
+	return (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
+}*/
 
 void *RGB2greyMult(void *argu){
 	int pval = *(int*)argu;
 	//apply the Gaussian filter to the image
 	for (int j = 0; j<imgHeight; j++) {
+		int tPxlJX = (j + EXTEND) * EXTEND_WIDTH + EXTEND;
 		for (int i = 0; i<imgWidth; i++){
-			pic_grey[ (j + EXTEND) * EXTEND_WIDTH + (i + EXTEND) ] = RGB2grey(i, j);
+
+			int tPxl = 3 * (j*imgWidth + i);
+			int tmp = (
+				pic_in[tPxl + MYRED] +
+				pic_in[tPxl + MYGREEN] +
+				pic_in[tPxl + MYBLUE] )/3;
+
+			pic_grey[ tPxlJX + i ] = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
 		}
 		if( j >= EXTEND ){
 			sem_post( &sema );
@@ -135,10 +140,38 @@ void *GaussianFilterMult(void *argu){
 
 		for (int i = 0; i<imgWidth; i++){
 			//extend the size form WxHx1 to WxHx3
-			int tmp = GaussianFilter(i, j);
-			pic_final[3 * (j*imgWidth + i) + MYRED] = tmp;
-			pic_final[3 * (j*imgWidth + i) + MYGREEN] = tmp;
-			pic_final[3 * (j*imgWidth + i) + MYBLUE] = tmp;
+			// int tmp = GaussianFilter(i, j);
+			int tmp = 0;
+			{
+				int w = i+EXTEND;
+				int h = j+EXTEND;
+				int a, b;
+				int ws = (int)sqrt((float)FILTER_SIZE);
+
+				int w_minus_wsHalf = w - ws/2;
+				int h_minus_wsHalf = h - ws/2;
+
+				for (int j = 0; j<ws; j++){
+					int jws = j*ws;
+					for (int i = 0; i<ws; i++){
+
+						a = i + w_minus_wsHalf;
+						b = j + h_minus_wsHalf;
+
+						// detect for borders of the image
+						//if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
+
+						tmp += filter_G[jws + i] * pic_grey[ b*EXTEND_WIDTH + a ];
+					}
+				}
+				tmp /= FILTER_SCALE;
+				tmp = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
+			}
+
+			int tPxl = 3 * (j*imgWidth + i);
+			pic_final[tPxl + MYRED] = tmp;
+			pic_final[tPxl + MYGREEN] = tmp;
+			pic_final[tPxl + MYBLUE] = tmp;
 		}
 
 
