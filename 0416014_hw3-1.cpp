@@ -19,11 +19,11 @@ using namespace std;
 
 int imgWidth, imgHeight;
 int FILTER_SIZE;
+int FILTER_SIZE_HALF;
 int FILTER_SCALE;
 int *filter_G;
 
-sem_t sema[THREAD_NUM];
-int frame;
+sem_t sema;
 
 const char *inputfile_name[5] = {
 	"input1.bmp",
@@ -87,32 +87,29 @@ unsigned char GaussianFilter(int w, int h)
 void *RGB2greyMult(void *argu){
 	int pval = *(int*)argu;
 	//apply the Gaussian filter to the image
-	int frameBegin = frame * pval;
-	int frameEnd = frameBegin + frame;
-	for (int j = frameBegin; j<frameEnd; j++) {
+	for (int j = 0; j<imgHeight; j++) {
 		for (int i = 0; i<imgWidth; i++){
 			pic_grey[j*imgWidth + i] = RGB2grey(i, j);
 		}
-		if( j >= frameBegin+3 ){
-			 sem_post( &sema[ pval ] );
-/*			 if(j <= frameBegin+5){
-			  	printf("[Th %d][RGB2grey][j = %d] sema+\n", pval, j);
-			 	PAUSE;
-			 }*/
+		if( j >= FILTER_SIZE_HALF ){
+			sem_post( &sema );
+/*			if(j <= frameBegin+5){
+			 	printf("[Th %d][RGB2grey][j = %d] sema+\n", pval, j);
+				PAUSE;
+			}*/
 		}
 	}
-	sem_post( &sema[ pval ] );
-	sem_post( &sema[ pval ] );
-	sem_post( &sema[ pval ] );
+
+	for(int i=0; i<FILTER_SIZE_HALF; i++){
+		sem_post( &sema );
+	}
 }
 
 void *GaussianFilterMult(void *argu){
 	int pval = *(int*)argu;
 	//apply the Gaussian filter to the image
-	int frameBegin = frame * pval;
-	int frameEnd = frameBegin + frame;
-	for (int j = frameBegin; j<frameEnd; j++) {
-		sem_wait( &sema[ pval ] );
+	for (int j = 0; j<imgHeight; j++) {
+		sem_wait( &sema );
 /*		if(j <= frameBegin+5){
 			printf("[Th %d][GaussianFilterMult][imgHeight = %d][j = %d] sema-\n", pval, imgHeight, j);
 			PAUSE;
@@ -150,24 +147,19 @@ int main()
 		pic_blur = (unsigned char*)malloc(imgWidth*imgHeight*sizeof(unsigned char));
 		pic_final = (unsigned char*)malloc(3 * imgWidth*imgHeight*sizeof(unsigned char));
 		
+		FILTER_SIZE_HALF = FILTER_SIZE / 2;
 
-		frame =  imgHeight / THREAD_NUM ;
-		int apple[ THREAD_NUM ];
-		pthread_t thread[ THREAD_NUM ][2];
-		for(int i=0; i<THREAD_NUM; i++){
-			sem_init(&sema[i], 0, 1);
-			sem_wait(&sema[i]);
-			apple[i] = i;
-			pthread_create(&thread[i][0], NULL, RGB2greyMult, &apple[i]);			
-			pthread_create(&thread[i][1], NULL, GaussianFilterMult, &apple[i]);
-		}
+		pthread_t threadRGB;
+		pthread_t threadFilter;
+		sem_init(&sema, 0, 1);
+		sem_wait(&sema);
+		int apple;
+		pthread_create(&threadRGB, NULL, RGB2greyMult, &apple);			
+		pthread_create(&threadFilter, NULL, GaussianFilterMult, &apple);
 
 
-
-		for(int i=0; i<THREAD_NUM; i++){
-			pthread_join(thread[i][0], NULL);
-			pthread_join(thread[i][1], NULL);
-		}
+		pthread_join(threadRGB, NULL);
+		pthread_join(threadFilter, NULL);
 
 		
 
