@@ -9,7 +9,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
-#define THREAD_NUM 2
+#define THREAD_NUM 16
 #define PAUSE printf("PAUSE\n");while(getchar() != '\n')
 using namespace std;
 
@@ -43,7 +43,7 @@ const char *outputBlur_name[5] = {
 	"Blur5.bmp"
 };
 
-unsigned char *pic_in, *pic_grey, *pic_blur, *pic_final;
+unsigned char *pic_in, *pic_grey, *pic_final;
 
 unsigned char RGB2grey(int w, int h)
 {
@@ -103,7 +103,7 @@ void *RGB2greyMult(void *argu){
 		}
 	}
 
-	for(int i=0; i<FILTER_SIZE_HALF; i++){
+	for(int i=0; i < FILTER_SIZE_HALF + THREAD_NUM ; i++){
 		sem_post( &sema );
 	}
 }
@@ -159,13 +159,12 @@ int main()
 		pic_in = bmpReader->ReadBMP(inputfile_name[k], &imgWidth, &imgHeight);
 		// allocate space for output image
 		pic_grey = (unsigned char*)malloc(imgWidth*imgHeight*sizeof(unsigned char));
-		pic_blur = (unsigned char*)malloc(imgWidth*imgHeight*sizeof(unsigned char));
 		pic_final = (unsigned char*)malloc(3 * imgWidth*imgHeight*sizeof(unsigned char));
 		
 		FILTER_SIZE_HALF = FILTER_SIZE / 2;
 
 		pthread_t threadRGB;
-		pthread_t threadFilter[2];
+		pthread_t threadFilter[ THREAD_NUM ];
 		sem_init(&sema, 0, 1);
 		sem_wait(&sema);
 		int apple;
@@ -173,13 +172,15 @@ int main()
 		pthread_mutex_init(&mutex_filter, NULL);
 		pthread_create(&threadRGB, NULL, RGB2greyMult, &apple);		
 		j_share = 0;	
-		pthread_create(&threadFilter[0], NULL, GaussianFilterMult, &apple);
-		pthread_create(&threadFilter[1], NULL, GaussianFilterMult, &apple);
+		for(int i=0; i<THREAD_NUM; i++){
+			pthread_create(&threadFilter[i], NULL, GaussianFilterMult, &apple);
+		}
 
 
 		pthread_join(threadRGB, NULL);
-		pthread_join(threadFilter[0], NULL);
-		pthread_join(threadFilter[1], NULL);
+		for(int i=0; i<THREAD_NUM; i++){
+			pthread_join(threadFilter[i], NULL);
+		}
 
 		
 
@@ -190,7 +191,6 @@ int main()
 		//free memory space
 		free(pic_in);
 		free(pic_grey);
-		free(pic_blur);
 		free(pic_final);
 	}
 
