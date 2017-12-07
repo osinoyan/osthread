@@ -9,7 +9,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <semaphore.h>
-#define THREAD_NUM 8
+#define THREAD_NUM 16
 #define PAUSE printf("PAUSE\n");while(getchar() != '\n')
 using namespace std;
 
@@ -30,7 +30,6 @@ int *filter_Sy;
 
 pthread_mutex_t mutex_j_x;
 pthread_mutex_t mutex_j_y;
-pthread_mutex_t mutex_filter;
 
 const char *inputfile_name[5] = {
 	"input1.bmp",
@@ -49,89 +48,18 @@ const char *outputSobel_name[5] = {
 
 unsigned char *pic_in, *pic_grey, *pic_x, *pic_y, *pic_final;
 
-/*unsigned char RGB2grey(int w, int h)
-{
-	int tPxl = 3 * (h*imgWidth + w);
-
-	int tmp = (
-		pic_in[tPxl + MYRED] +
-		pic_in[tPxl + MYGREEN] +
-		pic_in[tPxl + MYBLUE] )/3;
-
-	if (tmp < 0) tmp = 0;
-	if (tmp > 255) tmp = 255;
-	return (unsigned char)tmp;
-}
-
-unsigned char edgeDetection(int w, int h, bool pval)
-{
-	w += EXTEND;
-	h += EXTEND;
-	int tmp = 0;
-	int a, b;
-	int ws = (int)sqrt((float)FILTER_SIZE);
-
-	int w_minus_wsHalf = w - ws/2;
-	int h_minus_wsHalf = h - ws/2;
-
-	for (int j = 0; j<ws; j++){
-		int jws = j*ws;
-		for (int i = 0; i<ws; i++){
-
-			a = i + w_minus_wsHalf;
-			b = j + h_minus_wsHalf;
-
-			// detect for borders of the image
-			// if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
-
-			if (pval)
-				tmp += filter_Sx[jws + i] * pic_grey[b*EXTEND_WIDTH + a];
-			else
-				tmp += filter_Sy[jws + i] * pic_grey[b*EXTEND_WIDTH + a];
-			
-			}
-	}
-	return (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
-}
-
-void *RGB2greyMult(void *argu){
-	int pval = *(int*)argu;
-	//apply the Gaussian filter to the image
-	for (int j = 0; j<imgHeight; j++) {
-		int tPxlJX = (j + EXTEND) * EXTEND_WIDTH + EXTEND;
-		for (int i = 0; i<imgWidth; i++){
-
-			int tPxl = 3 * (j*imgWidth + i);
-			int tmp = (
-				pic_in[tPxl + MYRED] +
-				pic_in[tPxl + MYGREEN] +
-				pic_in[tPxl + MYBLUE] )/3;
-
-			pic_grey[ tPxlJX + i ] = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
-		}
-	}
-}*/
 
 int j_share_x;
 int j_share_y;
 
-void *edgeDetectionMult(void *argu){
-	bool pval = *(bool*)argu;
-	int j_share = pval ? j_share_x : j_share_y;
+void *edgeDetectionMult_x(void *argu){
 	//apply the Gaussian filter to the image
-	for ( ; j_share < imgHeight ; ) {
+	for ( ; j_share_x < imgHeight ; ) {
 		int j;
-		if(pval){
 			pthread_mutex_lock(&mutex_j_x);
 			j = j_share_x;
 			j_share_x++;
 			pthread_mutex_unlock(&mutex_j_x);
-		}else{
-			pthread_mutex_lock(&mutex_j_y);
-			j = j_share_y;
-			j_share_y++;
-			pthread_mutex_unlock(&mutex_j_y);			
-		}
 
 
 		if(j >= imgHeight) break;
@@ -143,33 +71,70 @@ void *edgeDetectionMult(void *argu){
 				int w = i+EXTEND;
 				int h = j+EXTEND;
 				int a, b;
-				int ws = (int)sqrt((float)FILTER_SIZE);
 
-				int w_minus_wsHalf = w - ws/2;
-				int h_minus_wsHalf = h - ws/2;
+				int w_minus_wsHalf = w - WIN_SIZE/2;
+				int h_minus_wsHalf = h - WIN_SIZE/2;
+				int jws;
+				for (int j = 0; j<WIN_SIZE; j++){
+					jws = j*WIN_SIZE;
+					for (int i = 0; i<WIN_SIZE; i++){
 
-				for (int j = 0; j<ws; j++){
-					int jws = j*ws;
-					for (int i = 0; i<ws; i++){
-
-						a = i + w_minus_wsHalf;
-						b = j + h_minus_wsHalf;
+						// a = i + w_minus_wsHalf;
+						// b = j + h_minus_wsHalf;
 
 						// detect for borders of the image
 						//if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
 
-						if (pval)
-							tmp += filter_Sx[jws + i] * pic_grey[b*EXTEND_WIDTH + a];
-						else
-							tmp += filter_Sy[jws + i] * pic_grey[b*EXTEND_WIDTH + a];
+						tmp += filter_Sx[jws + i] * pic_grey[(j + h_minus_wsHalf)*EXTEND_WIDTH + (i + w_minus_wsHalf)];
 
 					}
 				}
-				tmp = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
-				if(pval)
-					pic_x[ j*imgWidth + i ] = tmp;
-				else
-					pic_y[ j*imgWidth + i ] = tmp;
+				pic_x[ j*imgWidth + i ] = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
+			}
+		}
+
+
+	}
+
+}
+void *edgeDetectionMult_y(void *argu){
+	//apply the Gaussian filter to the image
+	for ( ; j_share_y < imgHeight ; ) {
+		int j;
+			pthread_mutex_lock(&mutex_j_y);
+			j = j_share_y;
+			j_share_y++;
+			pthread_mutex_unlock(&mutex_j_y);
+
+
+		if(j >= imgHeight) break;
+
+		for (int i = 0; i<imgWidth; i++){
+			//extend the size form WxHx1 to WxHx3
+			int tmp = 0;
+			{
+				int w = i+EXTEND;
+				int h = j+EXTEND;
+				int a, b;
+
+				int w_minus_wsHalf = w - WIN_SIZE/2;
+				int h_minus_wsHalf = h - WIN_SIZE/2;
+				int jws;
+				for (int j = 0; j<WIN_SIZE; j++){
+					jws = j*WIN_SIZE;
+					for (int i = 0; i<WIN_SIZE; i++){
+
+						// a = i + w_minus_wsHalf;
+						// b = j + h_minus_wsHalf;
+
+						// detect for borders of the image
+						//if (a<0 || b<0 || a>=imgWidth || b>=imgHeight) continue;
+
+						tmp += filter_Sy[jws + i] * pic_grey[(j + h_minus_wsHalf)*EXTEND_WIDTH + (i + w_minus_wsHalf)];
+
+					}
+				}
+				pic_y[ j*imgWidth + i ] = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
 			}
 		}
 
@@ -181,7 +146,6 @@ void *edgeDetectionMult(void *argu){
 int j_share;
 
 void *finalMult(void *argu){
-	bool pval = *(bool*)argu;
 	for ( ; j_share < imgHeight ; ) {
 
 		pthread_mutex_lock(&mutex_j_x);
@@ -249,33 +213,22 @@ int main()
 		}
 
 		//apply the Gaussian filter to the image
-		pthread_t thread[ THREAD_NUM ];		
+		pthread_t thread_x[ THREAD_NUM ];		
+		pthread_t thread_y[ THREAD_NUM ];		
 		pthread_mutex_init(&mutex_j_x, NULL);
 		pthread_mutex_init(&mutex_j_y, NULL);
 		j_share_x = 0;
 		j_share_y = 0;
 		bool pval0 = 0, pval1 = 1;
-		for(int i=0; i<THREAD_NUM; i++) 
-			pthread_create(&thread[i], NULL, edgeDetectionMult, (i&0x1) ? &pval1 : &pval0 );
-		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread[i], NULL);
+		for(int i=0; i<THREAD_NUM; i++) pthread_create(&thread_x[i], NULL, edgeDetectionMult_x, &pval0 );
+		for(int i=0; i<THREAD_NUM; i++) pthread_create(&thread_y[i], NULL, edgeDetectionMult_y, &pval0 );
+		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread_x[i], NULL);
+		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread_y[i], NULL);
 
 
 		j_share = 0;
-		for(int i=0; i<THREAD_NUM; i++) pthread_create(&thread[i], NULL, finalMult, &pval0);
-		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread[i], NULL);
-
-		// for (int j = 0; j<imgHeight; j++) {
-		// 	for (int i = 0; i<imgWidth; i++){
-		// 		int tmp = sqrt( (float) (
-		// 			pic_x[ j*imgWidth + i ] * pic_x[ j*imgWidth + i ] + 
-		// 		 	pic_y[ j*imgWidth + i ] * pic_y[ j*imgWidth + i ] ) );
-		// 			tmp = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
-		// 		int tPxl = 3 * (j*imgWidth + i);
-		// 		pic_final[tPxl + MYRED] = tmp;
-		// 		pic_final[tPxl + MYGREEN] = tmp;
-		// 		pic_final[tPxl + MYBLUE] = tmp;
-		// 	}
-		// }
+		for(int i=0; i<THREAD_NUM; i++) pthread_create(&thread_x[i], NULL, finalMult, &pval0);
+		for(int i=0; i<THREAD_NUM; i++)	pthread_join(thread_x[i], NULL);
 
 
 		// write output BMP file
