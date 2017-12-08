@@ -68,8 +68,10 @@ void *edgeDetectionMult_x(void *argu){
 
 
 		if(j >= imgHeight) break;
-
+		int jPxl = j*imgWidth;
+		unsigned char *jPtr = pic_x + jPxl;
 		for (int i = 0; i<imgWidth; i++){
+
 			//extend the size form WxHx1 to WxHx3
 			int tmp = 0;
 			{
@@ -94,7 +96,7 @@ void *edgeDetectionMult_x(void *argu){
 
 					}
 				}
-				pic_x[ j*imgWidth + i ] = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
+				*(jPtr++) = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
 			}
 		}
 
@@ -117,7 +119,8 @@ void *edgeDetectionMult_y(void *argu){
 
 
 		if(j >= imgHeight) break;
-
+		int jPxl = j*imgWidth;
+		unsigned char *jPtr = pic_y + jPxl;
 		for (int i = 0; i<imgWidth; i++){
 			//extend the size form WxHx1 to WxHx3
 			int tmp = 0;
@@ -143,7 +146,7 @@ void *edgeDetectionMult_y(void *argu){
 
 					}
 				}
-				pic_y[ j*imgWidth + i ] = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
+				*(jPtr++) = (unsigned char)(tmp<0 ? 0 : tmp>255 ? 255 : tmp);
 			}
 		}
 
