@@ -55,8 +55,13 @@ int j_share_y;
 void *edgeDetectionMult_x(void *argu){
 	//apply the Gaussian filter to the image
 	for ( ; j_share_x < imgHeight ; ) {
+
 		int j;
 			pthread_mutex_lock(&mutex_j_x);
+			if(j_share_x+1 >= imgHeight){
+				pthread_mutex_unlock(&mutex_j_x);
+				break;
+			} 
 			j = j_share_x;
 			j_share_x++;
 			pthread_mutex_unlock(&mutex_j_x);
@@ -102,6 +107,10 @@ void *edgeDetectionMult_y(void *argu){
 	for ( ; j_share_y < imgHeight ; ) {
 		int j;
 			pthread_mutex_lock(&mutex_j_y);
+			if(j_share_y+1 >= imgHeight){
+				pthread_mutex_unlock(&mutex_j_y);
+				break;
+			} 
 			j = j_share_y;
 			j_share_y++;
 			pthread_mutex_unlock(&mutex_j_y);
